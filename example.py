@@ -170,7 +170,11 @@ if __name__ == "__main__":
     E_min_arg = np.argmin(E)
     GS = V[:, E_min_arg]
 
-    vec = GS + 0.1 * init_vec
+    sum_all_basis = np.sum(V, axis=-1)
+    sum_all_basis /= np.linalg.norm(sum_all_basis)
+
+    vec = GS + 0.1 * sum_all_basis
+    # vec = GS + 0.1 * init_vec
     # vec = np.random.rand(2**L) - 0.5
     # vec = GS + 0.2 * vec
     # vec = init_vec
@@ -179,7 +183,7 @@ if __name__ == "__main__":
     print("init vec = ", vec)
     print("E_TFI = ", E)
     overlap = np.abs(vec.dot(V))
-    print("overlap = ", overlap)
+    print("overlap with eigenstates= ", overlap)
     plt.semilogy(E, overlap, 'o-')
     plt.show()
 
