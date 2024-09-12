@@ -3,41 +3,77 @@ import scipy.linalg
 import matplotlib.pyplot as plt
 import scipy.sparse.linalg
 
+import scipy.sparse
+kron = scipy.sparse.kron
+eye = scipy.sparse.eye
+
 X = np.array([[0., 1.], [1., 0.]])
 Z = np.array([[1., 0.], [0., -1.]])
 Y = np.array([[0., -1.j], [1.j, 0.]])
+dense_X, dense_Y, dense_Z = X.copy(), Y.copy(), Z.copy()
+
+X = scipy.sparse.csr_array(X)
+Y = scipy.sparse.csr_array(Y)
+Z = scipy.sparse.csr_array(Z)
+
+def AFH(L,):
+    """
+    Convention: +XX + YY + ZZ
+    """
+    # H = np.zeros([2**L, 2**L])
+    H = scipy.sparse.csr_matrix((2**L, 2**L), dtype=np.float64)
+    for Op in [X, Y, Z]:
+        for i in range(L-1):
+            h = eye(1)
+            for j in range(0, i):
+                h = kron(h, eye(2))
+
+            h = kron(h, Op)
+            h = kron(h, Op)
+            for j in range(i+2, L):
+                h = kron(h, eye(2))
+
+            H = H + h
+
+    return H
+
 
 def TFI(L, g):
     """
     Convention: -ZZ + -gX
     """
-    H = np.zeros([2**L, 2**L])
+    # H = np.zeros([2**L, 2**L])
+    H = scipy.sparse.csr_matrix((2**L, 2**L), dtype=np.float64)
+    print("constructing H_TFI", end="\r")
     for i in range(L-1):
-        h = np.eye(1)
+        print("constructing H_TFI ZZ term for i=%d" % i, end="\r")
+        h = eye(1)
         for j in range(0, i):
-            h = np.kron(h, np.eye(2))
+            h = kron(h, eye(2))
 
-        h = np.kron(h, Z)
-        h = np.kron(h, Z)
+        h = kron(h, Z)
+        h = kron(h, Z)
         for j in range(i+2, L):
-            h = np.kron(h, np.eye(2))
+            h = kron(h, eye(2))
 
         H = H + (-h)
 
     h = Z
     for i in range(L-2):
-        h = np.kron(h, np.eye(2))
-    h = np.kron(h, Z)
+        h = kron(h, eye(2))
+
+    h = kron(h, Z)
     H = H + (-h)
 
     for i in range(L):
-        h = np.eye(1)
+        print("constructing H_TFI X term for i=%d" % i, end="\r")
+        h = eye(1)
         for j in range(0, i):
-            h = np.kron(h, np.eye(2))
+            h = kron(h, eye(2))
 
-        h = np.kron(h, X)
+        h = kron(h, X)
         for j in range(i+1, L):
-            h = np.kron(h, np.eye(2))
+            h = kron(h, eye(2))
 
         H = H + (-g * h)
 
@@ -47,15 +83,18 @@ def H_z(L):
     """
     H = -Z
     """
-    H = np.zeros([2**L, 2**L])
+    print("constructing H_z", end="\r")
+    # H = np.zeros([2**L, 2**L])
+    H = scipy.sparse.csr_matrix((2**L, 2**L), dtype=np.float64)
     for i in range(L):
-        h = np.eye(1)
+        print("constructing Z term for i=%d" % i, end="\r")
+        h = eye(1)
         for j in range(0, i):
-            h = np.kron(h, np.eye(2))
+            h = kron(h, eye(2))
 
-        h = np.kron(h, Z)
+        h = kron(h, Z)
         for j in range(i+1, L):
-            h = np.kron(h, np.eye(2))
+            h = kron(h, eye(2))
 
         H = H + (-h)
 
@@ -65,15 +104,18 @@ def H_x(L):
     """
     H = -X
     """
-    H = np.zeros([2**L, 2**L])
+    print("constructing H_x", end="\r")
+    # H = np.zeros([2**L, 2**L])
+    H = scipy.sparse.csr_matrix((2**L, 2**L), dtype=np.float64)
     for i in range(L):
-        h = np.eye(1)
+        print("constructing X term for i=%d" % i, end="\r")
+        h = eye(1)
         for j in range(0, i):
-            h = np.kron(h, np.eye(2))
+            h = kron(h, eye(2))
 
-        h = np.kron(h, X)
+        h = kron(h, X)
         for j in range(i+1, L):
-            h = np.kron(h, np.eye(2))
+            h = kron(h, eye(2))
 
         H = H + (-h)
 
@@ -84,7 +126,7 @@ def get_C(vec, Op1, Op2, L):
     vec = vec.copy()
     C = []
     Op2_vec = np.tensordot(Op2,
-                           vec.reshape([2**(L//2), 2, 2**(L//2)]),
+                           vec.reshape([2**(L//2), 2, 2**((L-1)//2)]),
                            [[1], [1]])
     Op2_vec = Op2_vec.transpose([1, 0, 2]).flatten()
 
@@ -102,8 +144,8 @@ def get_C(vec, Op1, Op2, L):
         Op1_Op2_vec = Op1_Op2_vec.transpose([1, 0, 2]).flatten()
         exp_val = vec.conj().dot(Op1_Op2_vec)
         # print("r = ", r, "exp=", exp_val, "exp--=", exp_val - Op1_exp_val * Op2_exp_val)
-        C.append(exp_val)
-        # C.append(exp_val - Op1_exp_val * Op2_exp_val)
+        # C.append(exp_val)
+        C.append(exp_val - Op1_exp_val * Op2_exp_val)
 
 
     return C
@@ -112,9 +154,11 @@ def get_ETC(vec, H, dt, steps, Op1, Op2, L):
     ETC = []
     ETC.append(get_C(vec, Op1, Op2, L))
 
-    U = scipy.linalg.expm(-1.j * dt * H)
+    # U = scipy.linalg.expm(-1.j * dt * H)
     for idx in range(steps):
-        vec = U.dot(vec)
+        # vec = U.dot(vec)
+        vec = scipy.sparse.linalg.expm_multiply(-1.j * dt * H, vec)
+
         ETC.append(get_C(vec, Op1, Op2, L))
 
     ETC = np.array(ETC)
@@ -126,14 +170,17 @@ def get_UTC(vec, H, dt, steps, Op1, Op2, L):
     UTC.append(get_C(vec, Op1, Op2, L))
 
     Op2_vec = np.tensordot(Op2,
-                           vec.reshape([2**(L//2), 2, 2**(L//2)]),
+                           vec.reshape([2**(L//2), 2, 2**((L-1)//2)]),
                            [[1], [1]])
     Op2_vec = Op2_vec.transpose([1, 0, 2]).flatten()
 
-    U = scipy.linalg.expm(-1.j * dt * H)
+    # U = scipy.linalg.expm(-1.j * dt * H)
     for idx in range(steps):
-        vec = U.dot(vec)
-        Op2_vec = U.dot(Op2_vec)
+        # vec = U.dot(vec)
+        vec = scipy.sparse.linalg.expm_multiply(-1.j * dt * H, vec)
+
+        # Op2_vec = U.dot(Op2_vec)
+        Op2_vec = scipy.sparse.linalg.expm_multiply(-1.j * dt * H, Op2_vec)
 
         C = []
         for r in range(L):
